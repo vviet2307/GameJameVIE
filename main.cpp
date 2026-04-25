@@ -157,6 +157,10 @@ struct FightContext
     bool enemyWon = false;
     float endTimer = 0.0f;
     float elapsed = 0.0f;
+    float selfAcceptanceTimer = 0.0f;
+    bool selfAcceptanceWon = false;
+    bool falseVictoryTriggered = false;
+    bool selfHintUnlocked = false;
 };
 
 struct GameContext
@@ -165,6 +169,115 @@ struct GameContext
     float stateTimer = 0.0f;
     FightContext fight{};
 };
+
+struct OptionalTexture
+{
+    Texture2D texture{};
+    bool loaded = false;
+};
+
+struct BackgroundLibrary
+{
+    OptionalTexture enfantFight1;
+    OptionalTexture enfantFight2;
+    OptionalTexture adoFight1;
+    OptionalTexture adoFight2;
+    OptionalTexture vingtaineTaff;
+    OptionalTexture vingtaineSelf;
+};
+
+struct HitEvent
+{
+    bool connected = false;
+    int damage = 0;
+    bool blocked = false;
+};
+
+const char* ResolveAssetPath(const char* primaryPath, const char* fallbackPath)
+{
+    if (FileExists(primaryPath))
+    {
+        return primaryPath;
+    }
+
+    if (FileExists(fallbackPath))
+    {
+        return fallbackPath;
+    }
+
+    return nullptr;
+}
+
+void LoadOptionalTexture(OptionalTexture& target, const char* primaryPath, const char* fallbackPath)
+{
+    const char* resolvedPath = ResolveAssetPath(primaryPath, fallbackPath);
+    if (resolvedPath == nullptr)
+    {
+        target.loaded = false;
+        return;
+    }
+
+    target.texture = LoadTexture(resolvedPath);
+    target.loaded = true;
+}
+
+void UnloadOptionalTexture(OptionalTexture& target)
+{
+    if (!target.loaded)
+    {
+        return;
+    }
+
+    UnloadTexture(target.texture);
+    target.loaded = false;
+}
+
+void LoadBackgroundLibrary(BackgroundLibrary& backgrounds)
+{
+    LoadOptionalTexture(backgrounds.enfantFight1, "assets/backgrounds/enfant_fight1.png", "build/assets/enfant_fight1.png");
+    LoadOptionalTexture(backgrounds.enfantFight2, "assets/backgrounds/enfant_fight2.png", "build/assets/enfant_fight2.png");
+    LoadOptionalTexture(backgrounds.adoFight1, "assets/backgrounds/ado_fight1.png", "build/assets/ado_fight1.png");
+    LoadOptionalTexture(backgrounds.adoFight2, "assets/backgrounds/ado_fight2.png", "build/assets/ado_fight2.png");
+    LoadOptionalTexture(backgrounds.vingtaineTaff, "assets/backgrounds/vingtaine_taff.png", "build/assets/vingtaine_taff.png");
+    LoadOptionalTexture(backgrounds.vingtaineSelf, "assets/backgrounds/vingtaine_self.png", "build/assets/vingtaine_self.png");
+}
+
+void UnloadBackgroundLibrary(BackgroundLibrary& backgrounds)
+{
+    UnloadOptionalTexture(backgrounds.enfantFight1);
+    UnloadOptionalTexture(backgrounds.enfantFight2);
+    UnloadOptionalTexture(backgrounds.adoFight1);
+    UnloadOptionalTexture(backgrounds.adoFight2);
+    UnloadOptionalTexture(backgrounds.vingtaineTaff);
+    UnloadOptionalTexture(backgrounds.vingtaineSelf);
+}
+
+const OptionalTexture* GetStageBackground(const BackgroundLibrary& backgrounds, GameState state)
+{
+    switch (state)
+    {
+        case GameState::STAGE_ENFANT_FIGHT1:
+            return backgrounds.enfantFight1.loaded ? &backgrounds.enfantFight1 : nullptr;
+
+        case GameState::STAGE_ENFANT_FIGHT2:
+            return backgrounds.enfantFight2.loaded ? &backgrounds.enfantFight2 : nullptr;
+
+        case GameState::STAGE_ADO_FIGHT1:
+            return backgrounds.adoFight1.loaded ? &backgrounds.adoFight1 : nullptr;
+
+        case GameState::STAGE_ADO_FIGHT2:
+            return backgrounds.adoFight2.loaded ? &backgrounds.adoFight2 : nullptr;
+
+        case GameState::STAGE_VINGTAINE_TAFF:
+            return backgrounds.vingtaineTaff.loaded ? &backgrounds.vingtaineTaff : nullptr;
+
+        case GameState::STAGE_VINGTAINE_FIGHT_SELF:
+            return backgrounds.vingtaineSelf.loaded ? &backgrounds.vingtaineSelf : nullptr;
+
+        default:
+            return nullptr;
+    }
+}
 
 AnimationClip GetAnimationClip(FighterAnim anim)
 {
@@ -227,6 +340,11 @@ bool IsVingtaineState(GameState state)
         default:
             return false;
     }
+}
+
+bool IsFinalSelfFight(GameState state)
+{
+    return state == GameState::STAGE_VINGTAINE_FIGHT_SELF;
 }
 
 GameState GetNextState(GameState state)
@@ -454,6 +572,7 @@ void SetupFight(FightContext& fight, GameState state)
     fight.enemy.hp = (state == GameState::STAGE_VINGTAINE_FIGHT_SELF) ? 120 : 100;
     fight.enemy.maxHp = fight.enemy.hp;
     fight.enemy.beardLook = (state == GameState::STAGE_VINGTAINE_FIGHT_SELF);
+    fight.selfHintUnlocked = !IsFinalSelfFight(state);
 }
 
 void EnterState(GameContext& game, GameState nextState)
@@ -624,39 +743,46 @@ void UpdateFighter(Fighter& fighter, const FighterCommand& command, float dt)
     }
 }
 
-void ResolveHit(Fighter& attacker, Fighter& defender)
+HitEvent ResolveHit(Fighter& attacker, Fighter& defender)
 {
+    HitEvent event{};
+
     if (attacker.hp <= 0 || defender.hp <= 0)
     {
-        return;
+        return event;
     }
 
     if (attacker.currentAttack == AttackType::NONE || attacker.attackConnected || !IsAttackActive(attacker))
     {
-        return;
+        return event;
     }
 
     const Rectangle hurtbox = GetHurtbox(defender);
     if (!CheckCollisionRecs(attacker.attackBox, hurtbox))
     {
-        return;
+        return event;
     }
 
     const AttackDefinition attack = GetAttackDefinition(attacker.currentAttack);
     attacker.attackConnected = true;
+    event.connected = true;
 
     if (defender.blocking && IsFacingOpponent(defender, attacker))
     {
-        defender.hp = std::max(0, defender.hp - std::max(1, attack.damage / 4));
+        event.blocked = true;
+        event.damage = std::max(1, attack.damage / 4);
+        defender.hp = std::max(0, defender.hp - event.damage);
         defender.velocity.x = attacker.facingRight ? 80.0f : -80.0f;
-        return;
+        return event;
     }
 
-    defender.hp = std::max(0, defender.hp - attack.damage);
+    event.damage = attack.damage;
+    defender.hp = std::max(0, defender.hp - event.damage);
     defender.hitTimer = 0.22f;
     defender.blocking = false;
     defender.velocity.x = attacker.facingRight ? 190.0f : -190.0f;
     defender.velocity.y = -120.0f;
+    return event;
 }
 
 void ResolveAnimations(Fighter& fighter)
@@ -699,25 +825,92 @@ void UpdateFight(GameContext& game, float dt)
 {
     FightContext& fight = game.fight;
     fight.elapsed += dt;
+    const bool isFinalSelfFight = IsFinalSelfFight(game.state);
 
     fight.player.facingRight = fight.enemy.position.x >= fight.player.position.x;
     fight.enemy.facingRight = fight.player.position.x >= fight.enemy.position.x;
 
     const FighterCommand playerCommand = ReadPlayerCommand();
-    const FighterCommand aiCommand = BuildAICommand(fight.enemy, fight.player, dt);
+    FighterCommand aiCommand = BuildAICommand(fight.enemy, fight.player, dt);
+
+    if (isFinalSelfFight && std::fabs(fight.player.position.x - fight.enemy.position.x) < 44.0f)
+    {
+        aiCommand.move = 0;
+        aiCommand.jump = false;
+        aiCommand.punch = false;
+        aiCommand.kick = false;
+        aiCommand.block = false;
+    }
 
     UpdateFighter(fight.player, playerCommand, dt);
     UpdateFighter(fight.enemy, aiCommand, dt);
 
-    ResolveHit(fight.player, fight.enemy);
-    ResolveHit(fight.enemy, fight.player);
+    const HitEvent playerHit = ResolveHit(fight.player, fight.enemy);
+    const HitEvent enemyHit = ResolveHit(fight.enemy, fight.player);
+
+    if (isFinalSelfFight && playerHit.connected)
+    {
+        const int backlashDamage = std::max(2, playerHit.damage * 2);
+        fight.player.hp = std::max(0, fight.player.hp - backlashDamage);
+        fight.player.hitTimer = std::max(fight.player.hitTimer, 0.28f);
+        fight.player.blocking = false;
+        fight.player.velocity.x = (fight.player.position.x < fight.enemy.position.x) ? -240.0f : 240.0f;
+        fight.player.velocity.y = -140.0f;
+        fight.selfHintUnlocked = true;
+    }
+
+    if (isFinalSelfFight && enemyHit.connected)
+    {
+        fight.selfHintUnlocked = true;
+    }
+
+    if (isFinalSelfFight && !fight.playerWon && !fight.enemyWon && fight.player.hp > 0 && fight.enemy.hp > 0)
+    {
+        const Rectangle playerBody = GetBodyRect(fight.player);
+        const Rectangle enemyBody = GetBodyRect(fight.enemy);
+        const bool overlappingSelf = CheckCollisionRecs(playerBody, enemyBody);
+        const bool standingStill =
+            std::fabs(fight.player.velocity.x) < 10.0f &&
+            std::fabs(fight.player.velocity.y) < 10.0f &&
+            fight.player.onGround &&
+            playerCommand.move == 0 &&
+            !playerCommand.jump &&
+            !playerCommand.punch &&
+            !playerCommand.kick &&
+            !playerCommand.block &&
+            fight.player.currentAttack == AttackType::NONE;
+
+        if (overlappingSelf && standingStill)
+        {
+            fight.selfAcceptanceTimer += dt;
+            fight.selfHintUnlocked = true;
+
+            if (fight.selfAcceptanceTimer >= 4.0f)
+            {
+                fight.playerWon = true;
+                fight.selfAcceptanceWon = true;
+                fight.endTimer = 0.0f;
+            }
+        }
+        else
+        {
+            fight.selfAcceptanceTimer = 0.0f;
+        }
+    }
 
     ResolveAnimations(fight.player);
     ResolveAnimations(fight.enemy);
     UpdateAnimation(fight.player.animation, dt);
     UpdateAnimation(fight.enemy.animation, dt);
 
-    if (!fight.playerWon && fight.enemy.hp <= 0)
+    if (isFinalSelfFight && !fight.playerWon && !fight.enemyWon && fight.enemy.hp <= 0)
+    {
+        fight.falseVictoryTriggered = true;
+        fight.selfHintUnlocked = true;
+        fight.enemyWon = true;
+        fight.endTimer = 0.0f;
+    }
+    else if (!fight.playerWon && fight.enemy.hp <= 0)
     {
         fight.playerWon = true;
         fight.endTimer = 0.0f;
@@ -747,8 +940,23 @@ void UpdateFight(GameContext& game, float dt)
     }
 }
 
-void DrawStageBackdrop(const FightDefinition& definition)
+void DrawStageBackdrop(const FightDefinition& definition, const OptionalTexture* backgroundTexture)
 {
+    if (backgroundTexture != nullptr && backgroundTexture->loaded)
+    {
+        DrawTexturePro(
+            backgroundTexture->texture,
+            Rectangle{ 0.0f, 0.0f, static_cast<float>(backgroundTexture->texture.width), static_cast<float>(backgroundTexture->texture.height) },
+            Rectangle{ 0.0f, 0.0f, static_cast<float>(SCREEN_WIDTH), static_cast<float>(SCREEN_HEIGHT) },
+            Vector2{ 0.0f, 0.0f },
+            0.0f,
+            WHITE
+        );
+        DrawRectangle(0, static_cast<int>(FLOOR_Y), SCREEN_WIDTH, SCREEN_HEIGHT - static_cast<int>(FLOOR_Y), Fade(definition.floorColor, 0.25f));
+        DrawRectangle(0, static_cast<int>(FLOOR_Y - 22.0f), SCREEN_WIDTH, 22, Fade(definition.accentColor, 0.18f));
+        return;
+    }
+
     DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, definition.skyColor, definition.backdropColor);
     DrawRectangle(0, static_cast<int>(FLOOR_Y), SCREEN_WIDTH, SCREEN_HEIGHT - static_cast<int>(FLOOR_Y), definition.floorColor);
     DrawRectangle(0, static_cast<int>(FLOOR_Y - 22.0f), SCREEN_WIDTH, 22, Fade(definition.accentColor, 0.25f));
@@ -881,10 +1089,11 @@ void DrawFighterPlaceholder(const Fighter& fighter)
     }
 }
 
-void DrawFightScene(const GameContext& game)
+void DrawFightScene(const GameContext& game, const BackgroundLibrary& backgrounds)
 {
     const FightContext& fight = game.fight;
-    DrawStageBackdrop(fight.definition);
+    const bool isFinalSelfFight = IsFinalSelfFight(game.state);
+    DrawStageBackdrop(fight.definition, GetStageBackground(backgrounds, game.state));
 
     DrawText(fight.definition.stageTitle, 48, 34, 34, RAYWHITE);
     DrawText(fight.definition.stageSubtitle, 48, 72, 22, Fade(RAYWHITE, 0.85f));
@@ -900,17 +1109,50 @@ void DrawFightScene(const GameContext& game)
     DrawRectangle(40, SCREEN_HEIGHT - 92, 640, 44, Fade(BLACK, 0.40f));
     DrawText("A/D ou Fleches: bouger   SPACE/W: sauter   J: poing   K: pied   L/Shift: parade", 52, SCREEN_HEIGHT - 80, 22, RAYWHITE);
 
+    if (isFinalSelfFight)
+    {
+        DrawRectangle(SCREEN_WIDTH - 470, SCREEN_HEIGHT - 154, 430, 106, Fade(BLACK, 0.52f));
+        DrawRectangleLines(SCREEN_WIDTH - 470, SCREEN_HEIGHT - 154, 430, 106, Fade(RAYWHITE, 0.35f));
+
+        if (fight.selfHintUnlocked)
+        {
+            DrawText("Retrouver soi-meme est souvent la meilleure solution.", SCREEN_WIDTH - 452, SCREEN_HEIGHT - 144, 20, GOLD);
+            DrawText("Parfois, on avance en cessant de frapper.", SCREEN_WIDTH - 452, SCREEN_HEIGHT - 116, 20, RAYWHITE);
+        }
+        else
+        {
+            DrawText("Le Soi ne tombe pas comme un boss ordinaire.", SCREEN_WIDTH - 452, SCREEN_HEIGHT - 136, 20, Fade(RAYWHITE, 0.88f));
+            DrawText("Les coups reviennent toujours plus fort.", SCREEN_WIDTH - 452, SCREEN_HEIGHT - 108, 20, Fade(RAYWHITE, 0.72f));
+        }
+    }
+
     if (fight.playerWon)
     {
         DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.35f));
-        DrawText("Victoire", SCREEN_WIDTH / 2 - 82, SCREEN_HEIGHT / 2 - 26, 46, GOLD);
+        if (isFinalSelfFight && fight.selfAcceptanceWon)
+        {
+            DrawText("Tu te retrouves", SCREEN_WIDTH / 2 - 170, SCREEN_HEIGHT / 2 - 26, 46, GOLD);
+        }
+        else
+        {
+            DrawText("Victoire", SCREEN_WIDTH / 2 - 82, SCREEN_HEIGHT / 2 - 26, 46, GOLD);
+        }
     }
 
     if (fight.enemyWon)
     {
         DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.45f));
-        DrawText("Defaite", SCREEN_WIDTH / 2 - 80, SCREEN_HEIGHT / 2 - 26, 46, RED);
-        DrawText("Appuie sur R pour recommencer ce stage", SCREEN_WIDTH / 2 - 188, SCREEN_HEIGHT / 2 + 26, 24, RAYWHITE);
+        if (isFinalSelfFight && fight.falseVictoryTriggered)
+        {
+            DrawText("Tu l'as vaincu, mais tu t'es perdu", SCREEN_WIDTH / 2 - 312, SCREEN_HEIGHT / 2 - 26, 42, RED);
+            DrawText("Retrouver soi-meme est souvent la meilleure solution.", SCREEN_WIDTH / 2 - 286, SCREEN_HEIGHT / 2 + 24, 24, GOLD);
+            DrawText("Appuie sur R pour recommencer ce stage", SCREEN_WIDTH / 2 - 188, SCREEN_HEIGHT / 2 + 58, 22, RAYWHITE);
+        }
+        else
+        {
+            DrawText("Defaite", SCREEN_WIDTH / 2 - 80, SCREEN_HEIGHT / 2 - 26, 46, RED);
+            DrawText("Appuie sur R pour recommencer ce stage", SCREEN_WIDTH / 2 - 188, SCREEN_HEIGHT / 2 + 26, 24, RAYWHITE);
+        }
     }
 }
 
@@ -1014,6 +1256,8 @@ int main()
     SetTargetFPS(TARGET_FPS);
 
     GameContext game{};
+    BackgroundLibrary backgrounds{};
+    LoadBackgroundLibrary(backgrounds);
     EnterState(game, GameState::MENU);
 
     while (!WindowShouldClose())
@@ -1071,7 +1315,7 @@ int main()
             case GameState::STAGE_ADO_FIGHT2:
             case GameState::STAGE_VINGTAINE_TAFF:
             case GameState::STAGE_VINGTAINE_FIGHT_SELF:
-                DrawFightScene(game);
+                DrawFightScene(game, backgrounds);
                 break;
 
             case GameState::STAGE_ENFANT_CUTSCENE:
@@ -1095,6 +1339,7 @@ int main()
         EndDrawing();
     }
 
+    UnloadBackgroundLibrary(backgrounds);
     CloseWindow();
     return 0;
 }
