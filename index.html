@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Au fil de la vie</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div id="container">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- ── HUD (visible during gameplay) ─────────────────── -->
+    <div id="hud">
+      <div class="score-row">
+        <div class="score-block">
+          <span class="label">SCORE</span>
+          <span id="score">0</span>
+        </div>
+        <div id="phaseLabel" class="phase-label">Bébé</div>
+      </div>
+
+      <div id="warning" class="warning-banner">
+        ⚠&nbsp;KARABA APPROCHE&nbsp;!
+      </div>
+
+      <!-- Phase-transition pop-up -->
+      <div id="phaseNotif" class="phase-notif"></div>
+    </div>
+
+    <!-- ── MAIN MENU ──────────────────────────────────────── -->
+    <div id="menuScreen" class="overlay">
+      <h1 class="title">Au fil de la vie</h1>
+      <p class="subtitle">The Course of Life</p>
+
+      <div class="phase-preview">
+        <div class="preview-item">🟢 <strong>Bébé</strong> – 0 pts</div>
+        <div class="preview-item">🔵 <strong>Enfant</strong> – 500 pts</div>
+        <div class="preview-item">🔴 <strong>Adulte</strong> – 1500 pts</div>
+      </div>
+
+      <div class="instructions">
+        <p>⬅ ➡ Flèches / Swipe — changer de voie</p>
+        <p>⬆ Flèche / Swipe haut — sauter</p>
+        <p>Ne laisse pas Karaba t'attraper !</p>
+      </div>
+
+      <button id="playBtn" class="btn-main">JOUER</button>
+    </div>
+
+    <!-- ── GAME OVER ───────────────────────────────────────── -->
+    <div id="gameoverScreen" class="overlay">
+      <h1 class="title red">Karaba t'a eu !</h1>
+
+      <div class="score-summary">
+        <div class="summary-row">
+          <span class="label">SCORE</span>
+          <span id="finalScore" class="big-num">0</span>
+        </div>
+        <div class="summary-row">
+          <span class="label">RECORD</span>
+          <span id="highScore" class="big-num gold">0</span>
+        </div>
+      </div>
+
+      <button id="retryBtn" class="btn-main">REJOUER</button>
+    </div>
+
+    <!-- ── LOADING SCREEN ────────────────────────────────────── -->
+    <div id="loadingScreen" class="overlay" style="display:flex;">
+      <p class="title" style="font-size:1.4rem;">Chargement…</p>
+      <div class="loading-bar"><div id="loadingFill"></div></div>
+      <p style="color:rgba(255,255,255,0.45);font-size:0.75rem;">
+        Place tes modèles dans&nbsp;<code>models/</code>
+      </p>
+    </div>
+  </div>
+
+  <!--
+    ES-module importmap — lets game.js use:
+      import * as THREE from 'three';
+      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three":          "https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.module.js",
+      "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="game.js"></script>
+</body>
+</html>
