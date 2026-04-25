@@ -1025,7 +1025,7 @@ void DrawFighterPlaceholder(const Fighter& fighter)
 
     // Placeholder pixel-art: a remplacer plus tard par DrawTextureRec/DrawTexturePro.
     DrawRectangleRounded(body, 0.10f, 4, bodyColor);
-    DrawRectangleRoundedLines(body, 0.10f, 4, 2.0f, fighter.outlineColor);
+    DrawRectangleRoundedLines(body, 0.10f, 4, fighter.outlineColor);
 
     const float headSize = fighter.width * 0.42f;
     const float headX = body.x + fighter.width * 0.30f;

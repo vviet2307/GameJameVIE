@@ -1,0 +1,7 @@
+build/
+CMakeFiles/
+_deps/
+*.cmake
+CMakeCache.txt
+Makefile
+AuFilDeLaVie

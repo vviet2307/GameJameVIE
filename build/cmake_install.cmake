@@ -1,4 +1,4 @@
-# Install script for directory: /Users/vivi/Documents/GameJameVIE
+# Install script for directory: /Users/loicphilippe/GAME_JAM/GameJameVIE
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -37,15 +37,10 @@ if(NOT DEFINED CMAKE_OBJDUMP)
   set(CMAKE_OBJDUMP "/usr/bin/objdump")
 endif()
 
-if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  # Include the install script for the subdirectory.
-  include("/Users/vivi/Documents/GameJameVIE/build/_deps/raylib-build/cmake_install.cmake")
-endif()
-
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
 if(CMAKE_INSTALL_LOCAL_ONLY)
-  file(WRITE "/Users/vivi/Documents/GameJameVIE/build/install_local_manifest.txt"
+  file(WRITE "/Users/loicphilippe/GAME_JAM/GameJameVIE/build/install_local_manifest.txt"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")
 endif()
 if(CMAKE_INSTALL_COMPONENT)
@@ -61,6 +56,6 @@ else()
 endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  file(WRITE "/Users/vivi/Documents/GameJameVIE/build/${CMAKE_INSTALL_MANIFEST}"
+  file(WRITE "/Users/loicphilippe/GAME_JAM/GameJameVIE/build/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")
 endif()
